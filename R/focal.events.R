@@ -135,14 +135,14 @@ filter.overlaps <- function(focal.events) {
 }
 
 
-gene.locs <- function(map.loc.agr, called.events, markers=NULL) {
+gene.locs <- function(map.loc.agr, called.events, markers=NULL, loc.adj=T) {
   lapply(called.events, function(event) {
     locs <- map.loc.agr[c(event$I, event$I + event$kw - 1), .(Chromosome, Position)]
     loc.start <- locs[1, Position]
     loc.end <- locs[2, Position]
     # Assert that locs[1, Chromosome] == locs[2, Chromosome]
     loc.chr <- as.character(locs[1, Chromosome])
-    if (!is.null(markers)) {
+    if (!is.null(markers) && loc.adj) {
       # If there are not marker found by the query a warning is displayed and
       # -/+ Inf is returned
       loc.adj.start <- suppressWarnings(markers[Chromosome==loc.chr & Position < loc.start,
@@ -202,15 +202,51 @@ called.to.genes <- function(map.loc.agr, called.events, max.length, genes.info, 
   
   # Filter overlaps
   focal.events <- filter.overlaps(focal.events)
-  
-  # Inser genes
+  # Insert genes
   focal.events <- insert.genes(genes.info, focal.events)
-
   focal.events
 }
 
+calc.break.qvalues_1tail <- function(events) {
+  len.events <- length(events)
+  l.p <- rep(0, len.events)
+  r.p <- rep(0, len.events)
+  
+  for(i in seq_len(len.events)){
+    l.p[i] <- events[[i]]$l$p
+    r.p[i] <- events[[i]]$r$p
+    events[[i]]$l$q <-events[[i]]$l$p
+    events[[i]]$r$q <-events[[i]]$r$p
+  }
+  
+  
+  num.tests <- RUBIC:::num.peaks(events)
+  q.all <- rep(-1e9, len.events)
+  correct.vec <- seq(from=1, to=num.tests, length.out = len.events)
+  for (test.i in seq_len(len.events)) {
+    max.l <- max(l.p)
+    max.r <- max(r.p)
+    max.all <- max(max.l, max.r)
+    if (max.all == -1e9) {
+      break
+    }
+    if (max.l == max.all) {
+      max.i <- which(l.p == max.l)[1]
+      events[[max.i]]$l$q <- max.l + log10(correct.vec[[test.i]])
+      l.p[max.i] <- -1e9
+    }
+    if (max.r == max.all) {
+      max.i <- which(r.p == max.r)[1]
+      events[[max.i]]$r$q <- max.r + log10(correct.vec[[test.i]])
+      r.p[max.i] <- -1e9
+    }
+    q.all[test.i] <- max.all + log10(correct.vec[[test.i]])
+  }
+  q.all <- sort(q.all[q.all != -1e9])
+  list(events=events, q.all=q.all)
+}
 
-calc.break.qvalues <- function(focal.p.events,  focal.n.events) {
+calc.break.qvalues_2tail <- function(focal.p.events,  focal.n.events) {
   len.p.events <- length(focal.p.events)
   len.n.events <- length(focal.n.events)
   p.l.p <- rep(0, len.p.events)
@@ -262,7 +298,6 @@ calc.break.qvalues <- function(focal.p.events,  focal.n.events) {
     }
     q.all[test.i] <- max.all + log10(test.i)
   }
-  
   q.all <- sort(q.all[q.all != -1e9])
   list(focal.p.events=focal.p.events,  focal.n.events=focal.n.events,
        q.all=q.all)

@@ -12,6 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+segment.events.to.tsv <- function(segments, file.name='') {
+  if (isempty(file.name)) {
+    file.name <- stdout()
+  }
+  fd <- file(file.name, "wb")
+  lines <- vapply(segments, function(event) {
+    paste(event$chromosome, event$loc.start, event$loc.end,
+          ifelse(event$l$q > -1e8, formatC(event$l$q, format="e", digits=5), NA_real_),
+          ifelse(event$r$q > -1e8, formatC(event$r$q, format="e", digits=5), NA_real_), 
+          sep='\t') 
+  }, character(1))
+  lines <- c(paste('Chromosome', 'Start', 'End', 'Left break (-log10(qValue))',
+                   'Right break (-log10(qValue))', sep='\t'),
+             lines)
+  writeLines(lines, con=fd, sep='\n')
+  flush(fd)
+  close(fd)
+}
 
 focal.events.to.tsv <- function(focal.events, file.name='') {
   if (isempty(file.name)) {

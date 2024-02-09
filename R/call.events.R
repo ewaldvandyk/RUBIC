@@ -12,6 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+num.peaks <- function(segments) {
+  num.segs <- length(segments)
+  if (!is.element('l', names(segments[[1]]))) {
+    return(NULL)
+  }
+  numUpPeaks <- 0
+  numDoPeaks <- 0
+  for (i in 1:num.segs) {
+    if (((segments[[i]]$l$amp == 0) && (sign(segments[[i]]$r$amp) == -1)) ||
+        ((segments[[i]]$r$amp == 0) && (sign(segments[[i]]$l$amp) == 1)) ||
+        ((sign(segments[[i]]$l$amp) == 1) && ((sign(segments[[i]]$l$amp) !=  sign(segments[[i]]$r$amp))))) {
+      numUpPeaks <- numUpPeaks + 1
+    }
+    if (((segments[[i]]$l$amp == 0) && (sign(segments[[i]]$r$amp) == 1)) ||
+        ((segments[[i]]$r$amp == 0) && (sign(segments[[i]]$l$amp) == -1)) ||
+        ((sign(segments[[i]]$l$amp) == -1) && ((sign(segments[[i]]$l$amp) !=  sign(segments[[i]]$r$amp))))) {
+      numDoPeaks <- numDoPeaks + 1
+    }
+  }
+  return(numUpPeaks+numDoPeaks)
+}
 
 min.kw.peak.index <- function(segments, t.sign, min.kw.peak=1e10) {
   num.segs <- length(segments)
@@ -83,7 +104,7 @@ is.peak.valid <- function(p.num, agr.cum.iter, segments, min.kw.peak.i, cna.agr,
     sig.info$amp <- z
     sig.info$p <- -log10(perc)
     peak.valid <- TRUE
-  } 
+  }
   
   list(peak.valid=peak.valid, sig.info=sig.info)
 }

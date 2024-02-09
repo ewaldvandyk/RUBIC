@@ -60,7 +60,7 @@ RUBIC <- setRefClass('RUBIC',
            amp.level="numeric",
            del.level="numeric",
            focal.threshold="numeric",
-           # The following are for nternal use only
+           # The following are for internal use only
            params.p="list",
            params.n="list",
            cna.matrix="matrix",
@@ -69,6 +69,8 @@ RUBIC <- setRefClass('RUBIC',
            segments.n="list",
            e.p="numeric",
            e.n="numeric",
+           all.p.segments="list",
+           all.n.segments="list",
            called.p.events="list",
            called.n.events="list",
            focal.p.events="list",
@@ -87,7 +89,6 @@ RUBIC <- setRefClass('RUBIC',
                                  col.sample=1, col.chromosome=2, col.start=3,
                                  col.end=4, col.log.ratio=6,
                                  ...) {
-             
              "Create a new RUBIC object. It is recommended to use the \\link{rubic} function instead
              of calling this method directly.
              See \\link{rubic} for parameter descriptions."
@@ -118,7 +119,6 @@ RUBIC <- setRefClass('RUBIC',
              focal.threshold <<- focal.threshold
              min.probes <<- min.probes
              fdr <<- as.numeric(fdr)
-             
              
              if (!is.null(seg.cna)) {
                # If seg.cna is a string then read the file
@@ -204,12 +204,11 @@ RUBIC <- setRefClass('RUBIC',
              } else {
                samples <<- as.character(samples)
              }
-             
              if (!is.null(seg.cna) && !is.null(markers)) {
                map.loc <<- preprocess.map.loc(seg.cna, .self$markers, .self$samples,
                                               min.seg.markers=min.seg.markers,
                                               min.mean=min.mean, max.mean=max.mean)
-               
+
                map.loc <<- ensure.min.probes(map.loc, .self$markers,
                                              min.probes=min.probes)
              }
@@ -245,6 +244,8 @@ RUBIC <- setRefClass('RUBIC',
              segments.n <<- list()
              e.p <<- NA_real_
              e.n <<- NA_real_
+             all.p.segments <<- list()
+             all.n.segments <<- list()
              called.p.events <<- list()
              called.n.events <<- list()
              focal.p.events <<- list()
@@ -258,7 +259,7 @@ RUBIC <- setRefClass('RUBIC',
              "Estimate the parameters necessary for segmentation and event calling."
              
              if (length(params.p) > 0 || length(params.n) > 0) {
-               warning('Parameters have been already estimated. Recomputing...')
+               warning('Parameters have already been estimated. Recomputing...')
              }
              
              cna.matrix <<- extract.matrix(map.loc)
@@ -294,6 +295,32 @@ RUBIC <- setRefClass('RUBIC',
              segments.n <<- segments$segments.n
              e.n <<- segments$e.n
            },
+           call.all.segments = function(genes=NULL) {
+             "Call all segments."
+             
+             if (length(segments.p) == 0 || length(segments.n) == 0) {
+               segment()
+             }
+             
+             if (length(all.p.segments) > 0 || length(all.n.segments) > 0) {
+               warning('Segments have already been called. Recomputing...')
+             }
+             
+             if (isempty(map.loc.agr)) map.loc.agr <<- sum.map.loc(map.loc)
+             
+             all.p.segments <<- RUBIC:::gene.locs(map.loc.agr, segments.p, markers, loc.adj=F)
+             all.n.segments <<- RUBIC:::gene.locs(map.loc.agr, segments.n, markers, loc.adj=F)
+             
+             p_segs <- calc.break.qvalues_1tail(all.p.segments)
+             n_segs <- calc.break.qvalues_1tail(all.n.segments)
+             # focals <- calc.break.qvalues_2tail(focal.p.events, focal.n.events)
+             all.p.segments <<- sort.regions.on.genome(p_segs$events)
+             all.n.segments <<- sort.regions.on.genome(n_segs$events)
+             # focal.p.events <<- sort.regions.on.genome(focals$focal.p.events)
+             # focal.n.events <<- sort.regions.on.genome(focals$focal.n.events)
+             # q.all <<- focals$q.all
+             return()
+           },
            
            call.events = function() {
              "Call recurrent events."
@@ -307,6 +334,7 @@ RUBIC <- setRefClass('RUBIC',
              
              if (isempty(cna.matrix)) cna.matrix <<- extract.matrix(map.loc)
              
+             
              called.p.events <<- RUBIC:::call.events(cna.matrix,
                                                      amp.level, del.level,
                                                      segments.p, params.p,
@@ -315,8 +343,8 @@ RUBIC <- setRefClass('RUBIC',
                                                      amp.level, del.level,
                                                      segments.n, params.n,
                                                      fdr, e.n, -1)
+             
            },
-           
            call.focal.events = function(genes=NULL) {
              "Call focal events."
              
@@ -360,7 +388,7 @@ RUBIC <- setRefClass('RUBIC',
              focal.n.events <<- called.to.genes(map.loc.agr, called.n.events,
                                                 focal.threshold,
                                                 .self$genes, markers)
-             focals <- calc.break.qvalues(focal.p.events, focal.n.events)
+             focals <- calc.break.qvalues_2tail(focal.p.events, focal.n.events)
              focal.p.events <<- sort.regions.on.genome(focals$focal.p.events)
              focal.n.events <<- sort.regions.on.genome(focals$focal.n.events)
              q.all <<- focals$q.all
@@ -374,6 +402,22 @@ RUBIC <- setRefClass('RUBIC',
              map.loc.agr <<- data.table()
              
              saveRDS(.self, file=file)
+           },
+           
+           save.segment.gains = function(file){
+             "Save segmented profile on aggregate gains in TSV format"
+             if (length(all.p.segments) == 0){
+               call.all.segments()
+             }
+             segment.events.to.tsv(all.p.segments, file)
+           },
+           
+           save.segment.losses = function(file){
+             "Save segmented profile on aggregate losses in TSV format"
+             if (length(all.n.segments) == 0){
+               call.all.segments()
+             }
+             segment.events.to.tsv(all.n.segments, file)
            },
            
            save.focal.gains = function(file) {
@@ -423,7 +467,6 @@ RUBIC <- setRefClass('RUBIC',
                  stop('Empty gene locations')
                }
              }
-             
              if (NROW(custom.genes) == 0) {
                generate.all.plots.eps(dir, map.loc, amp.level, del.level,
                                       segments.p, segments.n,
@@ -438,7 +481,6 @@ RUBIC <- setRefClass('RUBIC',
                                       width=width, height=height)
              }
            }
-           
          )
 )
 

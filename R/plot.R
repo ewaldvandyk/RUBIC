@@ -480,5 +480,4 @@ generate.all.plots.eps <- function(dir,
            focal.n=focal.n,
            genes=NULL, steps=steps, offset.table=offset.table) # genes NULL so always whole genome
   dev.off()  
-  
 }
